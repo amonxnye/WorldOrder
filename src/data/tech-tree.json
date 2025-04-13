@@ -1,0 +1,141 @@
+{
+  "branches": [
+    {
+      "name": "Governance",
+      "technologies": [
+        {
+          "id": "gov_colonial_resistance",
+          "name": "Colonial Resistance",
+          "era": "1925–1950",
+          "description": "Mobilize resistance against colonial powers.",
+          "effects": ["+10% Morale", "Unlock Revolution Events"],
+          "prerequisites": [],
+          "unlocks": ["gov_constitutional_assembly"]
+        },
+        {
+          "id": "gov_constitutional_assembly",
+          "name": "Constitutional Assembly",
+          "era": "1925–1950",
+          "description": "Form a constitutional assembly to draft founding documents.",
+          "effects": ["+5% Stability", "+15% Legitimacy"],
+          "prerequisites": ["gov_colonial_resistance"],
+          "unlocks": ["gov_republic", "gov_single_party"]
+        },
+        {
+          "id": "gov_republic",
+          "name": "Republican Democracy",
+          "era": "1950–1980",
+          "description": "Establish a multi-party democratic system.",
+          "effects": ["+15% Foreign Relations", "+10% Innovation Rate", "-5% Control"],
+          "prerequisites": ["gov_constitutional_assembly"],
+          "unlocks": ["gov_federalism"]
+        },
+        {
+          "id": "gov_single_party",
+          "name": "Single Party State",
+          "era": "1950–1980",
+          "description": "Consolidate power under a dominant political party.",
+          "effects": ["+20% Control", "-10% Foreign Relations", "+15% Industry Growth"],
+          "prerequisites": ["gov_constitutional_assembly"],
+          "unlocks": ["gov_state_capitalism"]
+        }
+      ]
+    },
+    {
+      "name": "Economy",
+      "technologies": [
+        {
+          "id": "econ_agricultural_reform",
+          "name": "Agricultural Reform",
+          "era": "1925–1950",
+          "description": "Modernize farming practices and land distribution.",
+          "effects": ["+15% Food Production", "+5% Rural Development"],
+          "prerequisites": [],
+          "unlocks": ["econ_industrial_zones", "econ_trade_networks"]
+        },
+        {
+          "id": "econ_industrial_zones",
+          "name": "Industrial Zones",
+          "era": "1925–1950",
+          "description": "Establish special economic zones for industrial development.",
+          "effects": ["+20% Manufacturing Output", "+10% Urban Growth"],
+          "prerequisites": ["econ_agricultural_reform"],
+          "unlocks": ["econ_state_corporations"]
+        },
+        {
+          "id": "econ_trade_networks",
+          "name": "International Trade Networks",
+          "era": "1950–1980",
+          "description": "Develop international export markets and trade routes.",
+          "effects": ["+15% GDP Growth", "+10% Foreign Relations"],
+          "prerequisites": ["econ_agricultural_reform"],
+          "unlocks": ["econ_free_market_reforms"]
+        }
+      ]
+    },
+    {
+      "name": "Military",
+      "technologies": [
+        {
+          "id": "mil_national_army",
+          "name": "National Army Formation",
+          "era": "1925–1950",
+          "description": "Organize disparate forces into a professional national army.",
+          "effects": ["+20% Military Strength", "+10% National Unity"],
+          "prerequisites": [],
+          "unlocks": ["mil_mechanized_divisions", "mil_guerrilla_tactics"]
+        },
+        {
+          "id": "mil_guerrilla_tactics",
+          "name": "Guerrilla Warfare",
+          "era": "1925–1950",
+          "description": "Develop asymmetric warfare capabilities against conventional forces.",
+          "effects": ["+30% Defense in Home Territory", "+15% Resistance"],
+          "prerequisites": ["mil_national_army"],
+          "unlocks": ["mil_special_forces"]
+        },
+        {
+          "id": "mil_mechanized_divisions",
+          "name": "Mechanized Divisions",
+          "era": "1950–1980",
+          "description": "Form armored and mechanized infantry divisions.",
+          "effects": ["+25% Offensive Capabilities", "+15% Force Projection"],
+          "prerequisites": ["mil_national_army"],
+          "unlocks": ["mil_modern_logistics"]
+        }
+      ]
+    },
+    {
+      "name": "Culture",
+      "technologies": [
+        {
+          "id": "cul_national_identity",
+          "name": "National Identity Program",
+          "era": "1925–1950",
+          "description": "Develop and promote a cohesive national identity.",
+          "effects": ["+15% National Unity", "+10% Cultural Influence"],
+          "prerequisites": [],
+          "unlocks": ["cul_public_education", "cul_state_media"]
+        },
+        {
+          "id": "cul_public_education",
+          "name": "Universal Public Education",
+          "era": "1950–1980",
+          "description": "Establish a nationwide public education system.",
+          "effects": ["+20% Education Level", "+15% Innovation Rate", "+10% Growth"],
+          "prerequisites": ["cul_national_identity"],
+          "unlocks": ["cul_higher_education"]
+        },
+        {
+          "id": "cul_state_media",
+          "name": "State Media Networks",
+          "era": "1950–1980",
+          "description": "Establish radio and television networks for information dissemination.",
+          "effects": ["+15% Information Control", "+10% Cultural Influence"],
+          "prerequisites": ["cul_national_identity"],
+          "unlocks": ["cul_cultural_exports"]
+        }
+      ]
+    }
+  ]
+} 
