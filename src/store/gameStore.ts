@@ -252,7 +252,7 @@ const applyTechEffects = (resources: Resources, techId: string): Resources => {
 };
 
 // Calculate growth rate modifiers based on technologies
-const calculateGrowthModifiers = (unlockedTechs: string[]): Record<keyof Resources, number> => {
+const calculateGrowthModifiers = (unlockedTechs: string[], scientists: number = 0): Record<keyof Resources, number> => {
   const modifiers: Record<keyof Resources, number> = {
     stability: 1,
     economy: 1,
@@ -297,6 +297,28 @@ const calculateGrowthModifiers = (unlockedTechs: string[]): Record<keyof Resourc
       }
     });
   });
+  
+  // Apply bonus from scientists (each scientist adds 1% to all growth rates)
+  if (scientists > 0) {
+    const scientistBonus = scientists * 0.01;
+    Object.keys(modifiers).forEach(key => {
+      modifiers[key as keyof Resources] += scientistBonus;
+    });
+  }
+  
+  // Education bonus from Public Education tech
+  if (unlockedTechs.includes('cul_public_education')) {
+    Object.keys(modifiers).forEach(key => {
+      modifiers[key as keyof Resources] += 0.05; // 5% bonus from education
+    });
+  }
+  
+  // Higher Education gives even more bonus
+  if (unlockedTechs.includes('cul_higher_education')) {
+    Object.keys(modifiers).forEach(key => {
+      modifiers[key as keyof Resources] += 0.07; // 7% bonus from higher education
+    });
+  }
   
   // Ensure no negative growth modifiers
   Object.keys(modifiers).forEach(key => {
@@ -544,8 +566,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   investInResource: (resourceKey: keyof Resources) => {
     const { resources, naturalResources, unlockedTechs, population, yearlyObjectives } = get();
     
-    // Calculate growth modifiers based on unlocked techs
-    const growthModifiers = calculateGrowthModifiers(unlockedTechs);
+    // Calculate growth modifiers based on unlocked techs and scientists
+    const growthModifiers = calculateGrowthModifiers(unlockedTechs, population.scientists);
     
     // Calculate growth amount (base rate * modifier, but cap at MAX_GROWTH_PERCENTAGE)
     const baseGrowthRate = 0.05; // 5% base growth rate for investments
@@ -585,7 +607,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     
     // Affect population mood based on resource invested
     const newPopulation = { ...population };
-    newPopulation.mood = Math.min(100, newPopulation.mood + 2); // Slight mood boost for any investment
+    
+    // Extra mood boost when investing in culture (education)
+    if (resourceKey === 'culture') {
+      newPopulation.mood = Math.min(100, newPopulation.mood + 3);
+    } else {
+      newPopulation.mood = Math.min(100, newPopulation.mood + 2);
+    }
     
     // Update objectives status
     const updatedObjectives = updateObjectivesStatus(
