@@ -10,6 +10,7 @@ import EducationSystem from './components/EducationSystem';
 import BankingSystem from './components/BankingSystem';
 import AuthContainer from './components/auth/AuthContainer';
 import UserProfile from './components/auth/UserProfile';
+import NationSetupModal from './components/NationSetupModal';
 import { useState, useEffect } from 'react';
 import { useGameStore } from './store/gameStore';
 import { useAuth } from './utils/AuthContext';
@@ -18,9 +19,12 @@ import { updateUserGameStats } from './utils/firebase';
 function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [nationSetupModalOpen, setNationSetupModalOpen] = useState(false);
   const resetGame = useGameStore(state => state.resetGame);
   const { currentUser, loading } = useAuth();
   const gameState = useGameStore(state => state);
+  const nationName = useGameStore(state => state.nationName);
+  const leaderName = useGameStore(state => state.leaderName);
   
   // Initialize game with objectives on first load
   useEffect(() => {
@@ -31,14 +35,22 @@ function App() {
   useEffect(() => {
     if (currentUser && gameStarted) {
       const saveInterval = setInterval(() => {
+        // Calculate a score based on available properties
+        const score = Math.floor(
+          // Use any numeric resources available in the state
+          (gameState.resources.stability || 0) + 
+          (gameState.resources.economy || 0) + 
+          (gameState.naturalResources.food || 0) +
+          // Sum all population types
+          ((gameState.population.men || 0) + 
+           (gameState.population.women || 0) + 
+           (gameState.population.workers || 0)) * 10
+        );
+        
         const gameStats = {
           lastPlayed: new Date(),
           gamesCompleted: gameState.year > 2000 ? 1 : 0, // Example condition for game completion
-          highestScore: Math.floor(
-            gameState.resources.money + 
-            gameState.resources.food + 
-            gameState.population.total * 100
-          ), // Example score calculation
+          highestScore: score
         };
         
         updateUserGameStats(currentUser.uid, gameStats);
@@ -54,7 +66,11 @@ function App() {
 
   const handleStartGame = () => {
     if (currentUser) {
-      setGameStarted(true);
+      if (nationName && leaderName) {
+        setGameStarted(true);
+      } else {
+        setNationSetupModalOpen(true);
+      }
     } else {
       toggleAuthModal();
     }
@@ -140,7 +156,7 @@ function App() {
               onClick={handleStartGame}
               className="game-btn w-full py-4 text-lg font-bold"
             >
-              {currentUser ? "Embark on Your Journey" : "Sign in to Play"}
+              {currentUser ? (nationName && leaderName ? "Continue Your Journey" : "Setup Your Nation") : "Sign in to Play"}
             </button>
 
             {!currentUser && (
@@ -216,6 +232,16 @@ function App() {
       </main>
 
       <AuthContainer isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <NationSetupModal 
+        isOpen={nationSetupModalOpen} 
+        onClose={() => {
+          setNationSetupModalOpen(false);
+          // If nation and leader are selected, start the game
+          if (nationName && leaderName) {
+            setGameStarted(true);
+          }
+        }} 
+      />
     </>
   );
 }

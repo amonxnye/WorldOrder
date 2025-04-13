@@ -5,16 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "build:ci": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "firebase deploy"
   },
   "dependencies": {
     "@babylonjs/core": "^8.2.0",
     "@types/three": "^0.175.0",
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
-    "firebase": "^10.14.1",
+    "firebase": "^10.10.0",
     "pixi.js": "^8.9.1",
     "postcss": "^8.5.3",
     "react": "^19.0.0",

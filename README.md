@@ -1,54 +1,109 @@
-# React + TypeScript + Vite
+# World Order
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+World Order is a historical nation-building simulator where players lead their chosen nation from 1925 to the present day, navigating through historical eras, researching technologies, building their economy, and establishing diplomatic relations.
 
-Currently, two official plugins are available:
+## Live Demo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The game is deployed and available at: [https://worldordergameapp.web.app](https://worldordergameapp.web.app)
 
-## Expanding the ESLint configuration
+## Features
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Authentication System**: Sign in to save your progress and compete on leaderboards
+- **Nation Selection**: Choose from real-world countries with unique starting attributes
+- **Resource Management**: Balance various resources to grow your nation
+- **Population Control**: Distribute your population among workers, soldiers, and scientists
+- **Technology Tree**: Research technologies to advance your civilization
+- **Banking System**: Manage your nation's finances
+- **Education System**: Develop your nation's educational infrastructure
+- **Yearly Objectives**: Complete objectives to earn rewards
+- **Global Map**: Visualize your nation's presence on the world stage
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## Tech Stack
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- **Frontend**: React 19, TypeScript, Tailwind CSS
+- **State Management**: Zustand
+- **3D Visualization**: Three.js, Babylon.js
+- **Authentication & Hosting**: Firebase
+- **Build Tool**: Vite
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Getting Started
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+### Prerequisites
+
+- Node.js (v18+ recommended)
+- npm or yarn
+
+### Installation
+
+1. Clone the repository
+   ```
+   git clone https://github.com/yourusername/worldorder.git
+   cd worldorder
+   ```
+
+2. Install dependencies
+   ```
+   npm install
+   ```
+
+3. Create a `.env` file in the root directory with your Firebase configuration:
+   ```
+   VITE_FIREBASE_API_KEY=your_api_key
+   VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+   VITE_FIREBASE_PROJECT_ID=your_project_id
+   VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+   VITE_FIREBASE_APP_ID=your_app_id
+   ```
+
+4. Start the development server
+   ```
+   npm run dev
+   ```
+
+## Deployment
+
+The app is configured for Firebase hosting. To deploy:
+
+1. Build the production version
+   ```
+   npm run build
+   ```
+
+2. Deploy to Firebase
+   ```
+   npm run deploy
+   ```
+
+## Project Structure
+
+- `src/components/` - React components
+- `src/store/` - Zustand state management
+- `src/data/` - Game data (countries, technologies, etc.)
+- `src/utils/` - Utility functions and Firebase setup
+- `src/assets/` - Static assets
+
+## Game Flow
+
+1. User signs in through Firebase Authentication
+2. User selects a nation and enters their leader name
+3. Game starts with the initial resources and technology level
+4. User manages resources, researches technologies, and completes yearly objectives
+5. Progress is saved automatically to Firebase
+
+## Recent Additions
+
+- **Population Manager**: Component to manage the distribution of population among workers, soldiers, and scientists
+- **Nation Setup Flow**: Required flow for selecting a nation and leader name before starting the game
+- **Game State Persistence**: Automatic saving of game state to Firebase
+- **Improved UI**: Enhanced user interface with animations and responsive design
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details
+
+## Acknowledgements
+
+- Three.js and Babylon.js communities for 3D visualization
+- Firebase for authentication and hosting
+- The React team for an excellent framework
