@@ -1,130 +1,164 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
-
-// Sample nations data
-const NATIONS = [
-  { id: 'ghana', name: 'Ghana', flag: '🇬🇭', leaderTitle: 'President', bonuses: ['Agricultural Expertise', 'Cultural Unity'] },
-  { id: 'kenya', name: 'Kenya', flag: '🇰🇪', leaderTitle: 'President', bonuses: ['Industrial Innovation', 'Trade Networks'] },
-  { id: 'nigeria', name: 'Nigeria', flag: '🇳🇬', leaderTitle: 'President', bonuses: ['Resource Wealth', 'Diplomatic Influence'] },
-  { id: 'egypt', name: 'Egypt', flag: '🇪🇬', leaderTitle: 'President', bonuses: ['Ancient Heritage', 'Military Tradition'] },
-  { id: 'ethiopia', name: 'Ethiopia', flag: '🇪🇹', leaderTitle: 'Prime Minister', bonuses: ['Independence Legacy', 'Resilience'] },
-  { id: 'custom', name: 'Custom Nation', flag: '🏳️', leaderTitle: 'Leader', bonuses: ['Define your own path'] }
-];
+import countries from '../data/countries';
 
 export default function NationSelector() {
-  const { setNation, setLeader, resetGame } = useGameStore();
-  const [selectedNation, setSelectedNation] = useState('');
-  const [customNationName, setCustomNationName] = useState('');
-  const [leaderName, setLeaderName] = useState('');
-  const [showSelector, setShowSelector] = useState(true);
+  const { nationName, leaderName, setNation, setLeader } = useGameStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempNationName, setTempNationName] = useState(nationName);
+  const [tempLeaderName, setTempLeaderName] = useState(leaderName);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [regionFilter, setRegionFilter] = useState<string>('All');
+  const [showCountryList, setShowCountryList] = useState(false);
   
-  const handleNationSelect = (nationId: string) => {
-    setSelectedNation(nationId);
-    
-    // If not custom, set the nation name directly
-    if (nationId !== 'custom') {
-      const nation = NATIONS.find(n => n.id === nationId);
-      if (nation) {
-        setNation(nation.name);
-      }
+  // Filter countries based on search term and region
+  const filteredCountries = countries.filter(country => {
+    const matchesSearch = country.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRegion = regionFilter === 'All' || country.region === regionFilter;
+    return matchesSearch && matchesRegion;
+  });
+  
+  // Group countries by region for easier selection
+  const groupedCountries = filteredCountries.reduce((acc, country) => {
+    if (!acc[country.region]) {
+      acc[country.region] = [];
     }
-  };
+    acc[country.region].push(country);
+    return acc;
+  }, {} as Record<string, typeof countries>);
   
-  const handleCustomNationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomNationName(e.target.value);
-    setNation(e.target.value || 'New Nation');
-  };
+  // Get all available regions
+  const regions = ['All', ...new Set(countries.map(country => country.region))];
   
-  const handleLeaderNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLeaderName(e.target.value);
-    setLeader(e.target.value || 'Anonymous Leader');
-  };
-  
-  const handleStartGame = () => {
-    // Set final values
-    if (selectedNation === 'custom' && customNationName) {
-      setNation(customNationName);
+  const handleSubmit = () => {
+    if (tempNationName.trim()) {
+      setNation(tempNationName);
     }
     
-    if (leaderName) {
-      setLeader(leaderName);
+    if (tempLeaderName.trim()) {
+      setLeader(tempLeaderName);
     }
     
-    // Reset game state and hide selector
-    resetGame();
-    setShowSelector(false);
+    setIsEditing(false);
   };
   
-  if (!showSelector) {
-    return (
-      <button 
-        className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm mt-2"
-        onClick={() => setShowSelector(true)}
-      >
-        Change Nation
-      </button>
-    );
-  }
+  const selectCountry = (country: typeof countries[0]) => {
+    setTempNationName(country.name);
+    setShowCountryList(false);
+  };
   
   return (
-    <div className="p-4 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-4">Select Your Nation</h2>
-      
-      <div className="grid md:grid-cols-3 gap-3 mb-4">
-        {NATIONS.map(nation => (
-          <div 
-            key={nation.id}
-            className={`p-3 border rounded-lg cursor-pointer transition-all
-              ${selectedNation === nation.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
-            onClick={() => handleNationSelect(nation.id)}
-          >
-            <div className="flex items-center">
-              <span className="text-3xl mr-2">{nation.flag}</span>
-              <div>
-                <h3 className="font-semibold">{nation.name}</h3>
-                <p className="text-sm text-gray-600">Bonuses: {nation.bonuses.join(', ')}</p>
+    <div className="relative">
+      {isEditing ? (
+        <div className="p-4 bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg">
+          <h3 className="font-medium mb-3">Edit Nation Details</h3>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nation Name</label>
+              <div className="flex">
+                <input 
+                  type="text"
+                  value={tempNationName}
+                  onChange={(e) => setTempNationName(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-l px-3 py-2 text-white"
+                />
+                <button
+                  className="px-3 py-2 bg-blue-600 text-white rounded-r"
+                  onClick={() => setShowCountryList(!showCountryList)}
+                >
+                  <span>🌎</span>
+                </button>
               </div>
             </div>
+            
+            {showCountryList && (
+              <div className="absolute z-10 mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg shadow-lg max-h-96 overflow-auto">
+                <div className="sticky top-0 bg-gray-900 p-2 border-b border-gray-700">
+                  <input
+                    type="text"
+                    placeholder="Search countries..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mb-2"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {regions.map(region => (
+                      <button
+                        key={region}
+                        className={`px-2 py-1 text-xs rounded ${
+                          regionFilter === region 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-gray-800 text-gray-300'
+                        }`}
+                        onClick={() => setRegionFilter(region)}
+                      >
+                        {region}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-2">
+                  {Object.entries(groupedCountries).map(([region, regionCountries]) => (
+                    <div key={region} className="mb-4">
+                      <h4 className="text-gray-400 text-sm font-medium mb-1">{region}</h4>
+                      <div className="space-y-1">
+                        {regionCountries.map(country => (
+                          <div 
+                            key={country.id}
+                            className="flex items-center p-2 hover:bg-gray-800 rounded cursor-pointer"
+                            onClick={() => selectCountry(country)}
+                          >
+                            <span className="text-lg mr-2">{country.flag}</span>
+                            <span>{country.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Leader Name</label>
+              <input 
+                type="text"
+                value={tempLeaderName}
+                onChange={(e) => setTempLeaderName(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                className="px-3 py-1 bg-gray-700 text-white rounded"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1 bg-blue-600 text-white rounded"
+                onClick={handleSubmit}
+              >
+                Save
+              </button>
+            </div>
           </div>
-        ))}
-      </div>
-      
-      {selectedNation === 'custom' && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Custom Nation Name
-          </label>
-          <input
-            type="text"
-            value={customNationName}
-            onChange={handleCustomNationChange}
-            className="w-full p-2 border border-gray-300 rounded"
-            placeholder="Enter nation name"
-          />
+        </div>
+      ) : (
+        <div 
+          className="flex items-center space-x-2 px-3 py-2 bg-gray-900/60 backdrop-blur-sm rounded-lg cursor-pointer hover:bg-gray-900/80"
+          onClick={() => setIsEditing(true)}
+        >
+          <div className="text-2xl">🏛️</div>
+          <div>
+            <div className="font-medium">{nationName}</div>
+            <div className="text-sm text-gray-400">Leader: {leaderName}</div>
+          </div>
+          <div className="text-gray-400">✏️</div>
         </div>
       )}
-      
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Leader Name
-        </label>
-        <input
-          type="text"
-          value={leaderName}
-          onChange={handleLeaderNameChange}
-          className="w-full p-2 border border-gray-300 rounded"
-          placeholder="Enter leader name"
-        />
-      </div>
-      
-      <button
-        onClick={handleStartGame}
-        disabled={!selectedNation}
-        className={`w-full py-2 px-4 rounded font-medium
-          ${selectedNation ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
-      >
-        Start as {selectedNation === 'custom' ? customNationName || 'New Nation' : NATIONS.find(n => n.id === selectedNation)?.name}
-      </button>
     </div>
   );
 } 
