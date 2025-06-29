@@ -17,6 +17,12 @@ interface NaturalResources {
   food: number;
   water: number;
   land: number;
+  // Advanced materials (unlocked by technology)
+  steel?: number;
+  oil?: number;
+  electricity?: number;
+  electronics?: number;
+  research_points?: number;
 }
 
 // Population data
@@ -42,11 +48,11 @@ interface YearlyObjective {
 
 // Growth rates per resource (base values)
 const GROWTH_RATES: Record<keyof Resources, number> = {
-  stability: 0.05,   // 5% base growth
-  economy: 0.07,     // 7% base growth
-  military: 0.03,    // 3% base growth
-  diplomacy: 0.04,   // 4% base growth
-  culture: 0.06      // 6% base growth
+  stability: 0.02,   // 2% base growth
+  economy: 0.03,     // 3% base growth
+  military: 0.01,    // 1% base growth
+  diplomacy: 0.015,  // 1.5% base growth
+  culture: 0.025     // 2.5% base growth
 };
 
 // Maximum growth percentage (10%)
@@ -58,7 +64,7 @@ const GROWTH_INTERVAL = 15000;
 // Population constants
 const MONTHLY_GROWTH_RATE = 0.1; // 10% monthly growth
 const ANNUAL_LOSS_RATE = 0.05;   // 5% annual population loss
-const FOOD_PER_PERSON = 2;       // Food consumed per person per month
+const FOOD_PER_PERSON = 4;       // Food consumed per person per month
 
 // Multiplayer specific interfaces
 interface GameEvent {
@@ -128,11 +134,33 @@ interface GameState {
   yearlyObjectives: YearlyObjective[];
   canAdvanceYear: boolean;
   
+  // Economic cycles
+  economicCycle: {
+    phase: 'boom' | 'bust' | 'recovery' | 'stable';
+    yearsInPhase: number;
+    nextCycleYear: number;
+    multiplier: number; // Economic impact multiplier
+  };
+  
+  // Debt system
+  nationalDebt: {
+    totalDebt: number;
+    monthlyInterest: number;
+    interestRate: number;
+    debtHistory: Array<{
+      month: number;
+      year: number;
+      amount: number;
+      reason: string;
+    }>;
+  };
+  
   // Actions
   selectTech: (techId: string) => void;
   advanceMonth: () => void;
   investInResource: (resourceKey: keyof Resources) => void;
   distributePeople: (role: 'workers' | 'soldiers' | 'scientists', amount: number) => void;
+  takeDebt: (amount: number, reason: string) => void;
   setNation: (name: string) => void;
   setLeader: (name: string) => void;
   setGameId: (id: string | null) => void;
@@ -234,9 +262,9 @@ const calculateResearchCost = (techId: string, resources: Resources): Partial<Re
 };
 
 // Calculate natural resource costs for investment
-const calculateInvestmentCost = (resourceKey: keyof Resources): Partial<NaturalResources> => {
-  // Different resources require different natural resources
-  const costsByResource: Record<keyof Resources, Partial<NaturalResources>> = {
+const calculateInvestmentCost = (resourceKey: keyof Resources, economicMultiplier: number = 1.0): Partial<NaturalResources> => {
+  // Different resources require different natural resources (base costs)
+  const baseCostsByResource: Record<keyof Resources, Partial<NaturalResources>> = {
     stability: { food: -10, minerals: -5 },
     economy: { wood: -15, minerals: -10, land: -5 },
     military: { minerals: -20, food: -10 },
@@ -244,7 +272,25 @@ const calculateInvestmentCost = (resourceKey: keyof Resources): Partial<NaturalR
     culture: { wood: -10, water: -5 }
   };
   
-  return costsByResource[resourceKey] || {};
+  const baseCosts = baseCostsByResource[resourceKey] || {};
+  
+  // Add random price fluctuations (±25%) on top of economic cycle effects
+  const priceFluctuationMin = 0.75;
+  const priceFluctuationMax = 1.25;
+  const randomFluctuation = Math.random() * (priceFluctuationMax - priceFluctuationMin) + priceFluctuationMin;
+  
+  // Combine economic cycle multiplier with random fluctuations
+  const totalMultiplier = economicMultiplier * randomFluctuation;
+  
+  // Apply multiplier to all costs
+  const adjustedCosts: Partial<NaturalResources> = {};
+  for (const [key, cost] of Object.entries(baseCosts)) {
+    if (cost !== undefined) {
+      adjustedCosts[key as keyof NaturalResources] = Math.floor(cost * totalMultiplier);
+    }
+  }
+  
+  return adjustedCosts;
 };
 
 // Apply tech effects to resources (simplified for demo)
@@ -318,7 +364,7 @@ const calculateGrowthModifiers = (unlockedTechs: string[], scientists: number = 
     culture: 1
   };
   
-  // Apply modifiers based on unlocked technologies
+  // Base technology multipliers
   unlockedTechs.forEach(techId => {
     const tech = findTech(techId);
     if (!tech) return;
@@ -355,31 +401,86 @@ const calculateGrowthModifiers = (unlockedTechs: string[], scientists: number = 
     });
   });
   
-  // Apply bonus from scientists (each scientist adds 1% to all growth rates)
+  // EXPONENTIAL SCALING: Education × Technology synergies
+  const educationLevels = {
+    none: 0,
+    basic: unlockedTechs.includes('cul_public_education') ? 1 : 0,
+    higher: unlockedTechs.includes('cul_higher_education') ? 2 : 0,
+    advanced: unlockedTechs.includes('cul_advanced_research') ? 3 : 0
+  };
+  
+  const educationLevel = Math.max(...Object.values(educationLevels));
+  
+  // Advanced technology synergies with exponential scaling
+  const techCombos = [
+    {
+      // Industrial Revolution combo
+      techs: ['eco_industrial_revolution', 'eco_steam_power'],
+      bonus: { economy: educationLevel * 0.5, military: educationLevel * 0.2 }
+    },
+    {
+      // Scientific Method combo
+      techs: ['cul_scientific_method', 'cul_higher_education'],
+      bonus: { culture: educationLevel * 0.8, economy: educationLevel * 0.3 }
+    },
+    {
+      // Modern Democracy combo
+      techs: ['gov_democracy', 'cul_public_education'],
+      bonus: { stability: educationLevel * 0.6, diplomacy: educationLevel * 0.4 }
+    },
+    {
+      // Information Age combo
+      techs: ['eco_computers', 'cul_higher_education', 'eco_internet'],
+      bonus: { economy: educationLevel * 1.2, culture: educationLevel * 0.8 }
+    }
+  ];
+  
+  // Apply exponential bonuses for technology combinations
+  techCombos.forEach(combo => {
+    const hasAllTechs = combo.techs.every(tech => unlockedTechs.includes(tech));
+    if (hasAllTechs) {
+      Object.entries(combo.bonus).forEach(([resource, bonus]) => {
+        if (resource in modifiers) {
+          modifiers[resource as keyof Resources] += bonus as number;
+        }
+      });
+    }
+  });
+  
+  // Scientists provide exponential scaling with education
   if (scientists > 0) {
-    const scientistBonus = scientists * 0.01;
+    const baseScientistBonus = scientists * 0.02; // 2% per scientist
+    const educationMultiplier = 1 + (educationLevel * 0.5); // Up to 2.5x with max education
+    const exponentialScientistBonus = baseScientistBonus * educationMultiplier;
+    
     Object.keys(modifiers).forEach(key => {
-      modifiers[key as keyof Resources] += scientistBonus;
+      modifiers[key as keyof Resources] += exponentialScientistBonus;
     });
+    
+    // Special research breakthrough bonus for high scientist + education combinations
+    if (scientists >= 5 && educationLevel >= 2) {
+      const breakthroughMultiplier = 1 + (scientists - 4) * 0.1 * educationLevel;
+      Object.keys(modifiers).forEach(key => {
+        modifiers[key as keyof Resources] *= breakthroughMultiplier;
+      });
+    }
   }
   
-  // Education bonus from Public Education tech
-  if (unlockedTechs.includes('cul_public_education')) {
-    Object.keys(modifiers).forEach(key => {
-      modifiers[key as keyof Resources] += 0.05; // 5% bonus from education
-    });
+  // Infrastructure compound bonuses (if multiple infrastructure techs are unlocked)
+  const infrastructureTechs = unlockedTechs.filter(tech => 
+    tech.includes('road') || tech.includes('railroad') || tech.includes('highway') || 
+    tech.includes('power') || tech.includes('telecommunication')
+  ).length;
+  
+  if (infrastructureTechs > 1) {
+    const infrastructureBonus = Math.pow(1.15, infrastructureTechs - 1); // Compound 15% per additional infrastructure
+    modifiers.economy *= infrastructureBonus;
+    modifiers.stability *= Math.pow(1.05, infrastructureTechs - 1);
   }
   
-  // Higher Education gives even more bonus
-  if (unlockedTechs.includes('cul_higher_education')) {
-    Object.keys(modifiers).forEach(key => {
-      modifiers[key as keyof Resources] += 0.07; // 7% bonus from higher education
-    });
-  }
-  
-  // Ensure no negative growth modifiers
+  // Ensure minimum growth but allow for massive scaling
   Object.keys(modifiers).forEach(key => {
-    modifiers[key as keyof Resources] = Math.max(0.1, modifiers[key as keyof Resources]);
+    modifiers[key as keyof Resources] = Math.max(0.1, Math.min(10, modifiers[key as keyof Resources])); // Cap at 10x for balance
   });
   
   return modifiers;
@@ -553,11 +654,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     culture: 2
   },
   naturalResources: {
-    wood: 500,
-    minerals: 300,
-    food: 400,
-    water: 600,
-    land: 1000
+    wood: 125,
+    minerals: 75,
+    food: 100,
+    water: 150,
+    land: 250,
+    steel: 0,
+    oil: 0,
+    electricity: 0,
+    electronics: 0,
+    research_points: 0
   },
   population: {
     men: 5,
@@ -581,6 +687,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameStartTime: Date.now(),
   yearlyObjectives: [],
   canAdvanceYear: false,
+  economicCycle: {
+    phase: 'stable',
+    yearsInPhase: 0,
+    nextCycleYear: 1930, // First cycle in 5 years
+    multiplier: 1.0
+  },
+  nationalDebt: {
+    totalDebt: 0,
+    monthlyInterest: 0,
+    interestRate: 0.05, // 5% annual interest rate
+    debtHistory: []
+  },
   
   // Actions
   selectTech: (techId: string) => {
@@ -637,7 +755,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Invest in a specific resource (manual growth)
   investInResource: (resourceKey: keyof Resources) => {
-    const { resources, naturalResources, unlockedTechs, population, yearlyObjectives } = get();
+    const { resources, naturalResources, unlockedTechs, population, yearlyObjectives, economicCycle } = get();
     
     // Calculate growth modifiers based on unlocked techs and scientists
     const growthModifiers = calculateGrowthModifiers(unlockedTechs, population.scientists);
@@ -647,8 +765,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const modifiedRate = baseGrowthRate * growthModifiers[resourceKey];
     const actualRate = Math.min(modifiedRate, MAX_GROWTH_PERCENTAGE);
     
-    // Calculate natural resource costs
-    const investmentCosts = calculateInvestmentCost(resourceKey);
+    // Calculate natural resource costs with economic cycle effects
+    const investmentCosts = calculateInvestmentCost(resourceKey, economicCycle.multiplier);
     
     // Check if we have enough natural resources
     let hasEnoughResources = true;
@@ -760,6 +878,49 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
   
+  // Take on national debt for immediate resources
+  takeDebt: (amount: number, reason: string) => {
+    const { nationalDebt, resources, naturalResources, year, month } = get();
+    
+    // Add to national debt
+    const newNationalDebt = { ...nationalDebt };
+    newNationalDebt.totalDebt += amount;
+    newNationalDebt.debtHistory.push({
+      month,
+      year,
+      amount,
+      reason
+    });
+    
+    // Convert debt to immediate economic boost and resources
+    const newResources = { ...resources };
+    const newNaturalResources = { ...naturalResources };
+    
+    // Economic boost from debt spending
+    newResources.economy = Math.min(100, newResources.economy + amount * 0.1);
+    newResources.stability = Math.min(100, newResources.stability + amount * 0.05);
+    
+    // Convert debt to natural resources (government investment)
+    const resourcesPerDebt = amount / 4; // Divide debt among 4 resources
+    newNaturalResources.food += Math.floor(resourcesPerDebt);
+    newNaturalResources.wood += Math.floor(resourcesPerDebt);
+    newNaturalResources.minerals += Math.floor(resourcesPerDebt * 0.5);
+    newNaturalResources.water += Math.floor(resourcesPerDebt);
+    
+    // Higher interest rate for larger debts (risk premium)
+    if (newNationalDebt.totalDebt > 500) {
+      newNationalDebt.interestRate = Math.min(0.15, 0.05 + (newNationalDebt.totalDebt - 500) * 0.00005);
+    }
+    
+    console.log(`💳 DEBT TAKEN: ${amount} for ${reason}. Total debt: ${newNationalDebt.totalDebt.toFixed(0)}`);
+    
+    set({
+      nationalDebt: newNationalDebt,
+      resources: newResources,
+      naturalResources: newNaturalResources
+    });
+  },
+  
   // Advance one month
   advanceMonth: () => {
     const { year, month, population, naturalResources, resources, unlockedTechs, yearlyObjectives, canAdvanceYear } = get();
@@ -834,6 +995,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
     
+    // Apply food spoilage (7% monthly loss)
+    const spoilageRate = 0.07;
+    newNaturalResources.food = Math.floor(newNaturalResources.food * (1 - spoilageRate));
+    
     // Calculate food consumption
     const foodConsumption = calculateFoodConsumption(newPopulation);
     
@@ -890,6 +1055,345 @@ export const useGameStore = create<GameState>((set, get) => ({
       newResources.stability = Math.min(100, newResources.stability);
     }
     
+    // RESOURCE INTERDEPENDENCY CHAINS - Advanced Material Production
+    
+    // Steel Production (requires Iron Age tech): Iron (minerals) + Coal (minerals) + Workers
+    if (unlockedTechs.includes('mil_iron_age') && newNaturalResources.minerals >= 20 && newPopulation.workers >= 2) {
+      const steelProduction = Math.floor(Math.min(newNaturalResources.minerals / 20, newPopulation.workers / 2));
+      newNaturalResources.steel = (newNaturalResources.steel || 0) + steelProduction * 5;
+      newNaturalResources.minerals -= steelProduction * 15; // Use less minerals thanks to efficiency
+      console.log(`⚙️ Steel production: +${steelProduction * 5} steel from ${steelProduction * 15} minerals`);
+    }
+    
+    // Oil Discovery & Production (requires 1950+ and Industrial Revolution)
+    if (newYear >= 1950 && unlockedTechs.includes('eco_industrial_revolution')) {
+      // Random oil discovery (5% chance per year if no oil yet)
+      if (!newNaturalResources.oil && Math.random() < 0.05) {
+        newNaturalResources.oil = Math.floor(Math.random() * 200) + 100; // 100-300 oil discovered
+        console.log(`🛢️ Oil discovered! +${newNaturalResources.oil} oil reserves`);
+        
+        if (get().gameId) {
+          get().addGameEvent({
+            type: 'resource_discovery',
+            fromUserId: 'system',
+            data: { resourceType: 'oil', amount: newNaturalResources.oil, year: newYear }
+          });
+        }
+      }
+      
+      // Oil extraction (requires workers and depletes over time)
+      if (newNaturalResources.oil && newNaturalResources.oil > 0 && newPopulation.workers >= 3) {
+        const oilExtraction = Math.min(Math.floor(newPopulation.workers / 3), Math.floor(newNaturalResources.oil * 0.1));
+        newNaturalResources.oil = Math.max(0, (newNaturalResources.oil || 0) - oilExtraction);
+        // Oil converted to economy boost
+        newResources.economy = Math.min(100, newResources.economy + oilExtraction * 0.5);
+      }
+    }
+    
+    // Electricity Production (requires Power tech): Coal + Water + Infrastructure
+    if (unlockedTechs.includes('eco_electricity') && newNaturalResources.minerals >= 10 && newNaturalResources.water >= 15) {
+      const electricityProduction = Math.floor(Math.min(newNaturalResources.minerals / 10, newNaturalResources.water / 15));
+      newNaturalResources.electricity = (newNaturalResources.electricity || 0) + electricityProduction * 3;
+      newNaturalResources.minerals -= electricityProduction * 8;
+      newNaturalResources.water -= electricityProduction * 12;
+      
+      // Electricity boosts all other production
+      if (electricityProduction > 0) {
+        newNaturalResources.food += electricityProduction * 2; // Better food processing
+        newNaturalResources.wood += electricityProduction; // Powered sawmills
+      }
+    }
+    
+    // Electronics Production (requires Computers tech): Steel + Electricity + Scientists
+    if (unlockedTechs.includes('eco_computers') && 
+        (newNaturalResources.steel || 0) >= 5 && 
+        (newNaturalResources.electricity || 0) >= 3 && 
+        newPopulation.scientists >= 1) {
+      
+      const electronicsProduction = Math.floor(Math.min(
+        (newNaturalResources.steel || 0) / 5,
+        (newNaturalResources.electricity || 0) / 3,
+        newPopulation.scientists
+      ));
+      
+      if (electronicsProduction > 0) {
+        newNaturalResources.electronics = (newNaturalResources.electronics || 0) + electronicsProduction * 2;
+        newNaturalResources.steel = (newNaturalResources.steel || 0) - electronicsProduction * 4;
+        newNaturalResources.electricity = (newNaturalResources.electricity || 0) - electronicsProduction * 2;
+        
+        // Electronics provide massive tech research boost
+        newNaturalResources.research_points = (newNaturalResources.research_points || 0) + electronicsProduction * 10;
+        newResources.culture += electronicsProduction * 2; // Information age culture
+      }
+    }
+    
+    // Research Points generation (Scientists + Education)
+    if (newPopulation.scientists > 0) {
+      const educationMultiplier = unlockedTechs.includes('cul_higher_education') ? 3 : 
+                                  unlockedTechs.includes('cul_public_education') ? 2 : 1;
+      const researchGeneration = newPopulation.scientists * educationMultiplier;
+      newNaturalResources.research_points = (newNaturalResources.research_points || 0) + researchGeneration;
+    }
+    
+    // RESEARCH BREAKTHROUGH MECHANICS (1-5% chance per month)
+    if (newPopulation.scientists >= 3) {
+      // Base breakthrough chance increases with scientists and education
+      const baseChance = 0.01; // 1% base chance
+      const scientistBonus = (newPopulation.scientists - 2) * 0.005; // 0.5% per scientist above 2
+      const educationBonus = unlockedTechs.includes('cul_higher_education') ? 0.02 : 
+                             unlockedTechs.includes('cul_public_education') ? 0.01 : 0;
+      const researchPointsBonus = Math.min(0.02, (newNaturalResources.research_points || 0) * 0.0001); // Bonus from accumulated research
+      
+      const totalBreakthroughChance = baseChance + scientistBonus + educationBonus + researchPointsBonus;
+      
+      if (Math.random() < totalBreakthroughChance) {
+        const breakthroughs = [
+          {
+            name: "Agricultural Innovation",
+            effects: () => {
+              newNaturalResources.food = Math.floor((newNaturalResources.food || 0) * 1.5);
+              newResources.economy += 5;
+            }
+          },
+          {
+            name: "Industrial Efficiency",
+            effects: () => {
+              newNaturalResources.steel = (newNaturalResources.steel || 0) + 50;
+              newResources.economy += 8;
+            }
+          },
+          {
+            name: "Medical Breakthrough",
+            effects: () => {
+              newPopulation.mood = Math.min(100, newPopulation.mood + 25);
+              // Reduce population loss rates temporarily
+              newPopulation.children += Math.floor(totalPop * 0.02);
+            }
+          },
+          {
+            name: "Energy Revolution",
+            effects: () => {
+              newNaturalResources.electricity = (newNaturalResources.electricity || 0) + 30;
+              newResources.economy += 12;
+              newResources.stability += 5;
+            }
+          },
+          {
+            name: "Communications Advance",
+            effects: () => {
+              newResources.diplomacy += 10;
+              newResources.culture += 8;
+              newNaturalResources.research_points = (newNaturalResources.research_points || 0) + 100;
+            }
+          },
+          {
+            name: "Military Innovation",
+            effects: () => {
+              newResources.military += 15;
+              newResources.stability += 3;
+            }
+          }
+        ];
+        
+        // Filter breakthroughs based on current era and tech level
+        let availableBreakthroughs = breakthroughs;
+        
+        if (newYear < 1900) {
+          availableBreakthroughs = breakthroughs.filter(b => 
+            b.name === "Agricultural Innovation" || b.name === "Medical Breakthrough"
+          );
+        } else if (newYear < 1950) {
+          availableBreakthroughs = breakthroughs.filter(b => 
+            b.name !== "Energy Revolution" && b.name !== "Communications Advance"
+          );
+        }
+        
+        const breakthrough = availableBreakthroughs[Math.floor(Math.random() * availableBreakthroughs.length)];
+        breakthrough.effects();
+        
+        // Consume research points for breakthrough
+        newNaturalResources.research_points = Math.max(0, (newNaturalResources.research_points || 0) - 50);
+        
+        // Add breakthrough event to multiplayer feed
+        if (get().gameId) {
+          get().addGameEvent({
+            type: 'research_breakthrough',
+            fromUserId: 'system',
+            data: {
+              breakthroughType: breakthrough.name,
+              scientists: newPopulation.scientists,
+              year: newYear
+            }
+          });
+        }
+        
+        console.log(`🔬 RESEARCH BREAKTHROUGH: ${breakthrough.name}! Your scientists have achieved a major discovery!`);
+      }
+    }
+    
+    // Apply resource depletion based on population and industry
+    const totalPop = calculateTotalPopulation(newPopulation);
+    const industryLevel = newPopulation.workers;
+    
+    // Base depletion rates (natural resource consumption)
+    const woodDepletion = Math.max(1, Math.floor(totalPop * 0.1 + industryLevel * 0.2));
+    const mineralsDepletion = Math.max(1, Math.floor(totalPop * 0.05 + industryLevel * 0.15));
+    const waterDepletion = Math.max(1, Math.floor(totalPop * 0.2 + industryLevel * 0.1));
+    
+    // Apply depletion (minimum 0 for each resource)
+    newNaturalResources.wood = Math.max(0, newNaturalResources.wood - woodDepletion);
+    newNaturalResources.minerals = Math.max(0, newNaturalResources.minerals - mineralsDepletion);
+    newNaturalResources.water = Math.max(0, newNaturalResources.water - waterDepletion);
+    
+    // Land degradation from overuse (if workers > available land/10)
+    const landCapacity = newNaturalResources.land / 10;
+    if (industryLevel > landCapacity) {
+      const overuse = industryLevel - landCapacity;
+      const landDegradation = Math.floor(overuse * 0.1);
+      newNaturalResources.land = Math.max(50, newNaturalResources.land - landDegradation); // minimum 50 land
+    }
+    
+    // Crisis Management - Random disasters (3% chance per month)
+    const disasterChance = Math.random();
+    if (disasterChance < 0.03) {
+      const disasters = [
+        {
+          name: "Drought",
+          effects: () => {
+            newNaturalResources.food = Math.floor(newNaturalResources.food * 0.7);
+            newNaturalResources.water = Math.floor(newNaturalResources.water * 0.6);
+            newPopulation.mood = Math.max(0, newPopulation.mood - 15);
+          }
+        },
+        {
+          name: "Earthquake",
+          effects: () => {
+            newNaturalResources.minerals = Math.floor(newNaturalResources.minerals * 0.8);
+            newNaturalResources.wood = Math.floor(newNaturalResources.wood * 0.9);
+            newPopulation.mood = Math.max(0, newPopulation.mood - 20);
+            // Population casualties
+            const casualties = Math.floor(totalPop * 0.02);
+            newPopulation.men = Math.max(0, newPopulation.men - Math.floor(casualties * 0.4));
+            newPopulation.women = Math.max(0, newPopulation.women - Math.floor(casualties * 0.4));
+            newPopulation.children = Math.max(0, newPopulation.children - Math.floor(casualties * 0.2));
+          }
+        },
+        {
+          name: "Disease Outbreak",
+          effects: () => {
+            const infectionRate = 0.15;
+            newPopulation.men = Math.floor(newPopulation.men * (1 - infectionRate));
+            newPopulation.women = Math.floor(newPopulation.women * (1 - infectionRate));
+            newPopulation.children = Math.floor(newPopulation.children * (1 - infectionRate * 0.8));
+            newPopulation.mood = Math.max(0, newPopulation.mood - 25);
+            newResources.stability = Math.max(0, newResources.stability - 10);
+          }
+        },
+        {
+          name: "Economic Recession",
+          effects: () => {
+            newResources.economy = Math.max(0, newResources.economy - 15);
+            newResources.stability = Math.max(0, newResources.stability - 8);
+            newPopulation.mood = Math.max(0, newPopulation.mood - 12);
+            // Reduce natural resource production temporarily
+            newNaturalResources.food = Math.floor(newNaturalResources.food * 0.85);
+          }
+        },
+        {
+          name: "Forest Fire",
+          effects: () => {
+            newNaturalResources.wood = Math.floor(newNaturalResources.wood * 0.5);
+            newNaturalResources.food = Math.floor(newNaturalResources.food * 0.8);
+            newPopulation.mood = Math.max(0, newPopulation.mood - 10);
+          }
+        }
+      ];
+      
+      const randomDisaster = disasters[Math.floor(Math.random() * disasters.length)];
+      randomDisaster.effects();
+      
+      // Add disaster event to multiplayer feed if in multiplayer
+      if (get().gameId) {
+        get().addGameEvent({
+          type: 'disaster',
+          fromUserId: 'system',
+          data: {
+            disasterType: randomDisaster.name,
+            month: newMonth,
+            year: newYear
+          }
+        });
+      }
+      
+      console.log(`🚨 DISASTER: ${randomDisaster.name} has struck your nation!`);
+    }
+    
+    // Economic Cycle Management
+    let newEconomicCycle = { ...get().economicCycle };
+    
+    if (yearChanged) {
+      newEconomicCycle.yearsInPhase++;
+      
+      // Check if we need to trigger a new economic cycle
+      if (newYear >= newEconomicCycle.nextCycleYear) {
+        const cycles = [
+          { phase: 'boom' as const, duration: [2, 4], multiplier: [1.3, 1.6], description: "Economic Boom" },
+          { phase: 'bust' as const, duration: [1, 3], multiplier: [0.4, 0.7], description: "Economic Recession" },
+          { phase: 'recovery' as const, duration: [2, 3], multiplier: [0.8, 1.1], description: "Economic Recovery" },
+          { phase: 'stable' as const, duration: [3, 6], multiplier: [0.9, 1.1], description: "Stable Economy" }
+        ];
+        
+        // Don't repeat the same phase twice in a row
+        const availableCycles = cycles.filter(c => c.phase !== newEconomicCycle.phase);
+        const newCycle = availableCycles[Math.floor(Math.random() * availableCycles.length)];
+        
+        const duration = Math.floor(Math.random() * (newCycle.duration[1] - newCycle.duration[0] + 1)) + newCycle.duration[0];
+        const multiplier = Math.random() * (newCycle.multiplier[1] - newCycle.multiplier[0]) + newCycle.multiplier[0];
+        
+        newEconomicCycle = {
+          phase: newCycle.phase,
+          yearsInPhase: 0,
+          nextCycleYear: newYear + duration,
+          multiplier: Number(multiplier.toFixed(2))
+        };
+        
+        // Apply economic cycle effects
+        if (newCycle.phase === 'boom') {
+          newResources.economy = Math.min(100, newResources.economy * 1.2);
+          newResources.stability = Math.min(100, newResources.stability * 1.1);
+          newPopulation.mood = Math.min(100, newPopulation.mood + 15);
+        } else if (newCycle.phase === 'bust') {
+          newResources.economy = Math.max(0, newResources.economy * 0.6);
+          newResources.stability = Math.max(0, newResources.stability * 0.8);
+          newPopulation.mood = Math.max(0, newPopulation.mood - 20);
+          // Economic hardship can cause population loss
+          const economicMigration = Math.floor(totalPop * 0.05);
+          newPopulation.men = Math.max(0, newPopulation.men - Math.floor(economicMigration * 0.4));
+          newPopulation.women = Math.max(0, newPopulation.women - Math.floor(economicMigration * 0.4));
+          newPopulation.children = Math.max(0, newPopulation.children - Math.floor(economicMigration * 0.2));
+        } else if (newCycle.phase === 'recovery') {
+          newResources.economy = Math.min(100, newResources.economy * 1.1);
+          newPopulation.mood = Math.min(100, newPopulation.mood + 8);
+        }
+        
+        // Add economic cycle event to multiplayer feed
+        if (get().gameId) {
+          get().addGameEvent({
+            type: 'economic_cycle',
+            fromUserId: 'system',
+            data: {
+              cycleType: newCycle.phase,
+              description: newCycle.description,
+              multiplier: newEconomicCycle.multiplier,
+              year: newYear
+            }
+          });
+        }
+        
+        console.log(`📈 ECONOMIC CYCLE: ${newCycle.description} (${newEconomicCycle.multiplier}x multiplier)`);
+      }
+    }
+    
     // Generate new objectives if year changed
     let newObjectives = yearlyObjectives;
     let canAdvance = canAdvanceYear;
@@ -915,6 +1419,35 @@ export const useGameStore = create<GameState>((set, get) => ({
       canAdvance = checkObjectivesCompleted(newObjectives);
     }
     
+    // DEBT SYSTEM - Compound Interest Mechanics
+    let newNationalDebt = { ...get().nationalDebt };
+    
+    if (newNationalDebt.totalDebt > 0) {
+      // Monthly compound interest calculation
+      const monthlyInterestRate = newNationalDebt.interestRate / 12;
+      const interestAccrued = newNationalDebt.totalDebt * monthlyInterestRate;
+      
+      newNationalDebt.totalDebt += interestAccrued;
+      newNationalDebt.monthlyInterest = interestAccrued;
+      
+      // Debt payment from economy (automatic deduction)
+      const debtPayment = Math.min(newResources.economy * 2, interestAccrued * 1.5); // Can pay up to 1.5x interest
+      newNationalDebt.totalDebt = Math.max(0, newNationalDebt.totalDebt - debtPayment);
+      newResources.economy = Math.max(0, newResources.economy - debtPayment / 2);
+      
+      // High debt penalties
+      if (newNationalDebt.totalDebt > 1000) {
+        newResources.stability = Math.max(0, newResources.stability - 5); // Debt crisis
+        newPopulation.mood = Math.max(0, newPopulation.mood - 8); // Austerity measures
+        
+        if (newNationalDebt.totalDebt > 2000) {
+          // Severe debt crisis - economic collapse risk
+          newResources.economy = Math.max(0, newResources.economy - 10);
+          console.log(`💸 DEBT CRISIS: National debt of ${newNationalDebt.totalDebt.toFixed(0)} is crippling your economy!`);
+        }
+      }
+    }
+    
     set({
       year: newYear,
       month: newMonth,
@@ -923,7 +1456,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       naturalResources: newNaturalResources,
       resources: newResources,
       yearlyObjectives: newObjectives,
-      canAdvanceYear: canAdvance
+      canAdvanceYear: canAdvance,
+      economicCycle: newEconomicCycle,
+      nationalDebt: newNationalDebt
     });
   },
   

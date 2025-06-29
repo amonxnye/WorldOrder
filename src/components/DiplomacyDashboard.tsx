@@ -86,7 +86,7 @@ const DiplomacyDashboard = () => {
     try {
       await respondToTradeOfferInFirestore(gameId, offerId, currentUser.uid, accepted);
       // Refresh data after response
-      fetchGameData();
+      setGameData(null); // This will trigger a re-fetch
     } catch (err: any) {
       setError(err.message || 'Failed to respond to trade offer.');
     }
@@ -101,7 +101,7 @@ const DiplomacyDashboard = () => {
     try {
       await declareWarInFirestore(gameId, currentUser.uid, targetUserId);
       setDiplomaticStance(targetUserId, 'rivalry'); // Update local state immediately
-      fetchGameData(); // Re-fetch to get updated game data including active wars
+      setGameData(null); // This will trigger a re-fetch // Re-fetch to get updated game data including active wars
     } catch (err: any) {
       setError(err.message || 'Failed to declare war.');
     } finally {
@@ -120,7 +120,7 @@ const DiplomacyDashboard = () => {
       const attackStrength = useGameStore.getState().resources.military;
       const result = await launchAttackInFirestore(gameId, currentUser.uid, targetUserId, attackStrength);
       console.log("Attack result:", result);
-      fetchGameData(); // Re-fetch to get updated game data including resource changes
+      setGameData(null); // This will trigger a re-fetch // Re-fetch to get updated game data including resource changes
     } catch (err: any) {
       setError(err.message || 'Failed to launch attack.');
     } finally {
