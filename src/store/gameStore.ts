@@ -100,6 +100,20 @@ interface MultiplayerState {
   syncStatus: 'synced' | 'syncing' | 'error';
 }
 
+// Insurance policy interface
+interface InsurancePolicy {
+  id: string;
+  type: 'disaster' | 'economic' | 'health' | 'agricultural';
+  name: string;
+  cost: number;
+  coverage: number; // Percentage of losses covered (0-100)
+  premium: number; // Monthly cost
+  active: boolean;
+  claimsUsed: number;
+  maxClaims: number;
+  purchaseYear: number;
+}
+
 // Game state interface
 interface GameState {
   gameId: string | null;
@@ -155,6 +169,15 @@ interface GameState {
     }>;
   };
   
+  // Insurance system
+  insurancePolicies: InsurancePolicy[];
+  insuranceCompany: {
+    reserves: number;
+    monthlyPremiumIncome: number;
+    totalClaimsPaid: number;
+    riskAssessment: 'low' | 'medium' | 'high' | 'extreme';
+  };
+  
   // Actions
   selectTech: (techId: string) => void;
   advanceMonth: () => void;
@@ -168,6 +191,11 @@ interface GameState {
   setDiplomaticStance: (targetUserId: string, stance: 'neutral' | 'alliance' | 'rivalry') => void;
   setWarOutcome: (attackerId: string, defenderId: string, outcome: 'win' | 'loss' | 'draw', stolenResources: any, attackerCasualties: number, defenderCasualties: number) => void;
   resetGame: () => void;
+  
+  // Insurance actions
+  purchaseInsurance: (policyType: InsurancePolicy['type'], coverageLevel: number) => void;
+  cancelInsurance: (policyId: string) => void;
+  fileInsuranceClaim: (policyId: string, lossAmount: number, reason: string) => number;
   
   // Growth actions
   triggerGrowth: (key: keyof Resources, manual?: boolean) => void;
@@ -698,6 +726,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     monthlyInterest: 0,
     interestRate: 0.05, // 5% annual interest rate
     debtHistory: []
+  },
+  insurancePolicies: [],
+  insuranceCompany: {
+    reserves: 0,
+    monthlyPremiumIncome: 0,
+    totalClaimsPaid: 0,
+    riskAssessment: 'medium'
   },
   
   // Actions
@@ -1259,58 +1294,116 @@ export const useGameStore = create<GameState>((set, get) => ({
       const disasters = [
         {
           name: "Drought",
+          type: 'agricultural' as const,
           effects: () => {
+            const foodLoss = Math.floor(newNaturalResources.food * 0.3);
+            const waterLoss = Math.floor(newNaturalResources.water * 0.4);
+            const moodLoss = 15;
+            
             newNaturalResources.food = Math.floor(newNaturalResources.food * 0.7);
             newNaturalResources.water = Math.floor(newNaturalResources.water * 0.6);
-            newPopulation.mood = Math.max(0, newPopulation.mood - 15);
+            newPopulation.mood = Math.max(0, newPopulation.mood - moodLoss);
+            
+            return { foodLoss, waterLoss, totalLoss: foodLoss + waterLoss };
           }
         },
         {
           name: "Earthquake",
+          type: 'disaster' as const,
           effects: () => {
+            const mineralsLoss = Math.floor(newNaturalResources.minerals * 0.2);
+            const woodLoss = Math.floor(newNaturalResources.wood * 0.1);
+            const moodLoss = 20;
+            
             newNaturalResources.minerals = Math.floor(newNaturalResources.minerals * 0.8);
             newNaturalResources.wood = Math.floor(newNaturalResources.wood * 0.9);
-            newPopulation.mood = Math.max(0, newPopulation.mood - 20);
+            newPopulation.mood = Math.max(0, newPopulation.mood - moodLoss);
             // Population casualties
             const casualties = Math.floor(totalPop * 0.02);
             newPopulation.men = Math.max(0, newPopulation.men - Math.floor(casualties * 0.4));
             newPopulation.women = Math.max(0, newPopulation.women - Math.floor(casualties * 0.4));
             newPopulation.children = Math.max(0, newPopulation.children - Math.floor(casualties * 0.2));
+            
+            return { mineralsLoss, woodLoss, totalLoss: mineralsLoss + woodLoss };
           }
         },
         {
           name: "Disease Outbreak",
+          type: 'health' as const,
           effects: () => {
             const infectionRate = 0.15;
+            const stabilityLoss = 10;
+            const moodLoss = 25;
+            
             newPopulation.men = Math.floor(newPopulation.men * (1 - infectionRate));
             newPopulation.women = Math.floor(newPopulation.women * (1 - infectionRate));
             newPopulation.children = Math.floor(newPopulation.children * (1 - infectionRate * 0.8));
-            newPopulation.mood = Math.max(0, newPopulation.mood - 25);
-            newResources.stability = Math.max(0, newResources.stability - 10);
+            newPopulation.mood = Math.max(0, newPopulation.mood - moodLoss);
+            newResources.stability = Math.max(0, newResources.stability - stabilityLoss);
+            
+            return { populationLoss: Math.floor(totalPop * infectionRate), totalLoss: stabilityLoss * 10 };
           }
         },
         {
           name: "Economic Recession",
+          type: 'economic' as const,
           effects: () => {
-            newResources.economy = Math.max(0, newResources.economy - 15);
-            newResources.stability = Math.max(0, newResources.stability - 8);
-            newPopulation.mood = Math.max(0, newPopulation.mood - 12);
-            // Reduce natural resource production temporarily
+            const economyLoss = 15;
+            const stabilityLoss = 8;
+            const moodLoss = 12;
+            const foodLoss = Math.floor(newNaturalResources.food * 0.15);
+            
+            newResources.economy = Math.max(0, newResources.economy - economyLoss);
+            newResources.stability = Math.max(0, newResources.stability - stabilityLoss);
+            newPopulation.mood = Math.max(0, newPopulation.mood - moodLoss);
             newNaturalResources.food = Math.floor(newNaturalResources.food * 0.85);
+            
+            return { economyLoss, stabilityLoss, foodLoss, totalLoss: economyLoss * 10 + stabilityLoss * 5 + foodLoss };
           }
         },
         {
           name: "Forest Fire",
+          type: 'disaster' as const,
           effects: () => {
+            const woodLoss = Math.floor(newNaturalResources.wood * 0.5);
+            const foodLoss = Math.floor(newNaturalResources.food * 0.2);
+            const moodLoss = 10;
+            
             newNaturalResources.wood = Math.floor(newNaturalResources.wood * 0.5);
             newNaturalResources.food = Math.floor(newNaturalResources.food * 0.8);
-            newPopulation.mood = Math.max(0, newPopulation.mood - 10);
+            newPopulation.mood = Math.max(0, newPopulation.mood - moodLoss);
+            
+            return { woodLoss, foodLoss, totalLoss: woodLoss + foodLoss };
           }
         }
       ];
       
       const randomDisaster = disasters[Math.floor(Math.random() * disasters.length)];
-      randomDisaster.effects();
+      const lossData = randomDisaster.effects();
+      
+      // Check for insurance coverage
+      const { insurancePolicies } = get();
+      const relevantPolicy = insurancePolicies.find(p => 
+        p.active && p.type === randomDisaster.type && p.claimsUsed < p.maxClaims
+      );
+      
+      if (relevantPolicy && lossData.totalLoss > 0) {
+        const payout = get().fileInsuranceClaim(
+          relevantPolicy.id, 
+          lossData.totalLoss, 
+          `${randomDisaster.name} disaster`
+        );
+        
+        if (payout > 0) {
+          console.log(`🚨 DISASTER: ${randomDisaster.name} has struck your nation!`);
+          console.log(`🛡️ INSURANCE: ${relevantPolicy.name} covered ${relevantPolicy.coverage}% of losses (${payout} payout)`);
+        }
+      } else {
+        console.log(`🚨 DISASTER: ${randomDisaster.name} has struck your nation!`);
+        if (lossData.totalLoss > 100) {
+          console.log(`💡 TIP: Consider purchasing ${randomDisaster.type} insurance to protect against future disasters`);
+        }
+      }
       
       // Add disaster event to multiplayer feed if in multiplayer
       if (get().gameId) {
@@ -1319,13 +1412,13 @@ export const useGameStore = create<GameState>((set, get) => ({
           fromUserId: 'system',
           data: {
             disasterType: randomDisaster.name,
+            totalLoss: lossData.totalLoss,
+            insurancePayout: relevantPolicy ? lossData.totalLoss * (relevantPolicy.coverage / 100) : 0,
             month: newMonth,
             year: newYear
           }
         });
       }
-      
-      console.log(`🚨 DISASTER: ${randomDisaster.name} has struck your nation!`);
     }
     
     // Economic Cycle Management
@@ -1419,6 +1512,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       canAdvance = checkObjectivesCompleted(newObjectives);
     }
     
+    // INSURANCE SYSTEM - Monthly premium payments and reserve management
+    let newInsurancePolicies = [...get().insurancePolicies];
+    let newInsuranceCompany = { ...get().insuranceCompany };
+    
+    // Calculate total monthly premiums
+    const activePolicies = newInsurancePolicies.filter(p => p.active);
+    const totalMonthlyPremiums = activePolicies.reduce((sum, policy) => sum + policy.premium, 0);
+    
+    if (totalMonthlyPremiums > 0) {
+      // Deduct premiums from economy
+      newResources.economy = Math.max(0, newResources.economy - totalMonthlyPremiums / 10);
+      
+      // Add premiums to insurance company reserves
+      newInsuranceCompany.reserves += totalMonthlyPremiums;
+      newInsuranceCompany.monthlyPremiumIncome = totalMonthlyPremiums;
+      
+      // Update risk assessment based on recent disasters and claims
+      const recentClaims = activePolicies.reduce((sum, policy) => sum + policy.claimsUsed, 0);
+      if (recentClaims > 3) {
+        newInsuranceCompany.riskAssessment = 'high';
+      } else if (recentClaims > 1) {
+        newInsuranceCompany.riskAssessment = 'medium';
+      } else {
+        newInsuranceCompany.riskAssessment = 'low';
+      }
+      
+      // Cancel policies that are too old or have exceeded claims
+      newInsurancePolicies = newInsurancePolicies.map(policy => {
+        if (policy.active && (newYear - policy.purchaseYear > 10 || policy.claimsUsed >= policy.maxClaims)) {
+          console.log(`📋 Insurance policy ${policy.name} has expired or reached maximum claims`);
+          return { ...policy, active: false };
+        }
+        return policy;
+      });
+    }
+    
     // DEBT SYSTEM - Compound Interest Mechanics
     let newNationalDebt = { ...get().nationalDebt };
     
@@ -1458,7 +1587,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       yearlyObjectives: newObjectives,
       canAdvanceYear: canAdvance,
       economicCycle: newEconomicCycle,
-      nationalDebt: newNationalDebt
+      nationalDebt: newNationalDebt,
+      insurancePolicies: newInsurancePolicies,
+      insuranceCompany: newInsuranceCompany
     });
   },
   
@@ -1783,5 +1914,142 @@ export const useGameStore = create<GameState>((set, get) => ({
         syncStatus: status
       }
     }));
+  },
+  
+  // Purchase insurance policy
+  purchaseInsurance: (policyType: InsurancePolicy['type'], coverageLevel: number) => {
+    const { resources, naturalResources, year, insurancePolicies } = get();
+    
+    // Define insurance policy templates
+    const policyTemplates = {
+      disaster: {
+        name: 'Natural Disaster Protection',
+        baseCost: 200,
+        basePremium: 15,
+        maxClaims: 3
+      },
+      economic: {
+        name: 'Economic Crisis Insurance',
+        baseCost: 300,
+        basePremium: 20,
+        maxClaims: 2
+      },
+      health: {
+        name: 'Public Health Emergency Coverage',
+        baseCost: 250,
+        basePremium: 18,
+        maxClaims: 4
+      },
+      agricultural: {
+        name: 'Agricultural Loss Protection',
+        baseCost: 150,
+        basePremium: 12,
+        maxClaims: 5
+      }
+    };
+    
+    const template = policyTemplates[policyType];
+    const costMultiplier = coverageLevel / 50; // 50% coverage = 1x cost, 100% = 2x cost
+    const finalCost = Math.floor(template.baseCost * costMultiplier);
+    const monthlyPremium = Math.floor(template.basePremium * costMultiplier);
+    
+    // Check if we can afford the initial cost
+    if (resources.economy < finalCost / 10) { // Cost scaled to economy points
+      console.log(`💸 Cannot afford ${template.name} - insufficient economic resources`);
+      return;
+    }
+    
+    // Check if we already have this type of insurance
+    const existingPolicy = insurancePolicies.find(p => p.type === policyType && p.active);
+    if (existingPolicy) {
+      console.log(`📋 You already have active ${template.name}`);
+      return;
+    }
+    
+    // Create new policy
+    const newPolicy: InsurancePolicy = {
+      id: `policy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: policyType,
+      name: template.name,
+      cost: finalCost,
+      coverage: coverageLevel,
+      premium: monthlyPremium,
+      active: true,
+      claimsUsed: 0,
+      maxClaims: template.maxClaims,
+      purchaseYear: year
+    };
+    
+    // Deduct initial cost from economy
+    const newResources = { ...resources };
+    newResources.economy = Math.max(0, newResources.economy - finalCost / 10);
+    
+    // Add policy to list
+    const newPolicies = [...insurancePolicies, newPolicy];
+    
+    console.log(`🛡️ INSURANCE PURCHASED: ${template.name} with ${coverageLevel}% coverage (${monthlyPremium}/month premium)`);
+    
+    set({
+      resources: newResources,
+      insurancePolicies: newPolicies
+    });
+  },
+  
+  // Cancel insurance policy
+  cancelInsurance: (policyId: string) => {
+    const { insurancePolicies } = get();
+    
+    const newPolicies = insurancePolicies.map(policy => 
+      policy.id === policyId ? { ...policy, active: false } : policy
+    );
+    
+    console.log(`❌ Insurance policy cancelled`);
+    
+    set({ insurancePolicies: newPolicies });
+  },
+  
+  // File insurance claim
+  fileInsuranceClaim: (policyId: string, lossAmount: number, reason: string): number => {
+    const { insurancePolicies, insuranceCompany, resources } = get();
+    
+    const policy = insurancePolicies.find(p => p.id === policyId);
+    if (!policy || !policy.active) {
+      console.log(`❌ Insurance policy not found or inactive`);
+      return 0;
+    }
+    
+    if (policy.claimsUsed >= policy.maxClaims) {
+      console.log(`❌ Maximum claims exceeded for ${policy.name}`);
+      return 0;
+    }
+    
+    // Calculate payout based on coverage percentage
+    const payout = Math.floor(lossAmount * (policy.coverage / 100));
+    
+    // Update policy claims
+    const newPolicies = insurancePolicies.map(p => 
+      p.id === policyId ? { ...p, claimsUsed: p.claimsUsed + 1 } : p
+    );
+    
+    // Update insurance company reserves
+    const newInsuranceCompany = {
+      ...insuranceCompany,
+      totalClaimsPaid: insuranceCompany.totalClaimsPaid + payout,
+      reserves: Math.max(0, insuranceCompany.reserves - payout)
+    };
+    
+    // Add payout to economy
+    const newResources = { ...resources };
+    newResources.economy = Math.min(100, newResources.economy + payout / 20); // Convert to economy points
+    
+    console.log(`💰 INSURANCE CLAIM: ${payout} payout for ${reason} under ${policy.name}`);
+    
+    set({
+      insurancePolicies: newPolicies,
+      insuranceCompany: newInsuranceCompany,
+      resources: newResources
+    });
+    
+    return payout;
   }
 })); 

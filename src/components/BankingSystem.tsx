@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
+import InsuranceSystem from './InsuranceSystem';
 
 type Loan = {
   id: string;
@@ -23,7 +24,7 @@ type Investment = {
 
 export default function BankingSystem() {
   const { resources, naturalResources, investInResource } = useGameStore();
-  const [activeTab, setActiveTab] = useState<'loans' | 'investments' | 'speculation' | 'policies'>('loans');
+  const [activeTab, setActiveTab] = useState<'loans' | 'investments' | 'speculation' | 'policies' | 'insurance'>('loans');
   const [loans, setLoans] = useState<Loan[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [economicPolicy, setEconomicPolicy] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
@@ -266,6 +267,12 @@ export default function BankingSystem() {
         >
           Policies
         </button>
+        <button 
+          className={`px-4 py-2 ${activeTab === 'insurance' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400'}`}
+          onClick={() => setActiveTab('insurance')}
+        >
+          <span className="text-blue-400">🛡️</span> Insurance
+        </button>
       </div>
       
       {/* Finance Summary */}
@@ -485,6 +492,13 @@ export default function BankingSystem() {
               but may lead to instability.
             </p>
           </div>
+        </div>
+      )}
+      
+      {/* Insurance Tab */}
+      {activeTab === 'insurance' && (
+        <div>
+          <InsuranceSystem />
         </div>
       )}
       
