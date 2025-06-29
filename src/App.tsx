@@ -20,6 +20,7 @@ import { useState, useEffect } from 'react';
 import { useGameStore } from './store/gameStore';
 import { useAuth } from './utils/AuthContext';
 import { updateUserGameStats, getGameDataFromFirestore } from './utils/firebase';
+import { userTracker } from './utils/userTracking';
 
 function App() {
   const [gameStarted, setGameStarted] = useState(false);
@@ -41,6 +42,28 @@ function App() {
   useEffect(() => {
     resetGame();
   }, [resetGame]);
+
+  // Initialize user tracking when user logs in
+  useEffect(() => {
+    if (currentUser) {
+      userTracker.startTracking(currentUser);
+      userTracker.trackPageView('game_main');
+    } else {
+      userTracker.stopTracking();
+    }
+
+    return () => {
+      userTracker.stopTracking();
+    };
+  }, [currentUser]);
+
+  // Track game state changes
+  useEffect(() => {
+    if (currentUser && gameStarted) {
+      userTracker.trackGameStateUpdate(gameState);
+    }
+  }, [gameState.year, gameState.resources, gameState.population, currentUser, gameStarted]);
+
 
   // Load multiplayer game data if gameId is set
   useEffect(() => {
@@ -103,16 +126,32 @@ function App() {
   };
 
   const handleStartGame = () => {
+    userTracker.trackActivity('start_game_clicked');
+    
     if (currentUser) {
       if (nationName && leaderName) {
         setGameStarted(true);
+        userTracker.trackActivity('game_started', { nationName, leaderName });
       } else {
         setNationSetupModalOpen(true);
+        userTracker.trackActivity('nation_setup_opened');
       }
     } else {
       toggleAuthModal();
+      userTracker.trackActivity('auth_modal_opened', { source: 'start_game' });
     }
   };
+
+  const handleShowDiplomacy = () => {
+    setShowDiplomacy(!showDiplomacy);
+    userTracker.trackActivity('diplomacy_toggled', { showing: !showDiplomacy });
+  };
+
+  const handleShowMultiplayer = () => {
+    setMultiplayerLobbyOpen(true);
+    userTracker.trackActivity('multiplayer_lobby_opened');
+  };
+
 
   if (loading || (gameId && !isMultiplayerGameLoaded)) {
     return (
@@ -131,8 +170,8 @@ function App() {
       
       <div className="min-h-screen relative z-10 flex flex-col">
         <GameHeader
-          onShowDiplomacy={() => setShowDiplomacy(!showDiplomacy)}
-          onShowMultiplayer={() => setMultiplayerLobbyOpen(true)}
+          onShowDiplomacy={handleShowDiplomacy}
+          onShowMultiplayer={handleShowMultiplayer}
           onSignIn={toggleAuthModal}
           gameStarted={gameStarted}
           showDiplomacy={showDiplomacy}
@@ -291,6 +330,7 @@ function App() {
           }
         }} 
       />
+
     </>
   );
 }
