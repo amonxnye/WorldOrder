@@ -54,6 +54,7 @@
 - **Disaster Strikes**: Take emergency loans if needed (Banking System → Loans)
 - **Population Unhappy**: Don't advance month until mood improves
 - **Resource Depletion**: Workers are being consumed by industry - reduce industrial activity
+- **Insurance Note**: Insurance systems unlock around 1970+ - focus on survival first
 
 #### Key Milestones to Achieve
 - [ ] Stable food production (50+ monthly surplus)
@@ -252,6 +253,7 @@
    - Investments Tab: Including extreme risk options
    - Speculation Tab: Leveraged resource trading
    - Policies Tab: Economic policy optimization
+   - Insurance Tab: Crisis protection systems 🛡️
    ```
 
 2. **High-Risk Investment Strategy**
@@ -314,16 +316,43 @@
    - Financial systems = Debt leverage + investment returns
    ```
 
-2. **Crisis Arbitrage**
+2. **Insurance System Mastery**
+   ```
+   Crisis Protection Strategy:
+   - Natural Disaster Protection: Earthquakes, floods, fires (3 max claims)
+   - Economic Crisis Insurance: Recessions, market crashes (2 max claims)
+   - Public Health Coverage: Disease outbreaks, health crises (4 max claims)
+   - Agricultural Protection: Droughts, crop failures (5 max claims)
+   
+   Coverage Optimization:
+   - 25% Coverage: Cheapest option, basic protection
+   - 50% Coverage: Balanced cost vs. benefit
+   - 75% Coverage: Recommended for volatile periods
+   - 100% Coverage: Maximum protection, highest premiums
+   
+   Strategic Timing:
+   - Purchase BEFORE disasters strike (not reactive)
+   - Higher coverage during economic boom periods
+   - Cancel expensive policies during resource scarcity
+   - Monitor claims usage vs. maximum limits
+   
+   Premium Management:
+   - Monthly premiums automatically deducted from economy
+   - Total cost displayed in banking system
+   - Policies expire after 10 years or max claims reached
+   - Insurance company reserves tracked for sustainability
+   ```
+
+3. **Crisis Arbitrage**
    ```
    Disaster Opportunity Strategy:
    - Disasters create resource price volatility
    - Short positions on affected resources before/during crisis
    - Long positions on recovery resources afterward
-   - Insurance systems (when available) for risk mitigation
+   - Insurance systems provide safety net for speculation risks
    ```
 
-3. **End-Game Optimization**
+4. **End-Game Optimization**
    ```
    Victory Condition Targeting:
    - Economic Domination: 1000+ economy resource sustained
@@ -409,6 +438,9 @@
 - ❌ Taking debt beyond manageable levels (>500)
 - ❌ Not diversifying financial portfolio
 - ❌ Ignoring crisis preparation for exponential systems
+- ❌ Buying insurance AFTER disasters strike (reactive vs. proactive)
+- ❌ Over-insuring during resource scarcity periods
+- ❌ Forgetting to monitor insurance claims usage limits
 
 ---
 
@@ -436,7 +468,8 @@
 1. Perfect disaster survival and recovery
 2. Economic cycle arbitrage mastery
 3. High-risk system management without collapse
-4. Exponential growth through volatility
+4. Insurance system optimization for risk mitigation
+5. Exponential growth through volatility
 
 ---
 
@@ -448,6 +481,8 @@
 - [ ] No negative resource trends
 - [ ] Disaster preparedness check
 - [ ] Economic cycle awareness
+- [ ] Insurance premium costs manageable (1970+ only)
+- [ ] Insurance claims usage within limits
 
 ### Technology Priority by Era
 ```
