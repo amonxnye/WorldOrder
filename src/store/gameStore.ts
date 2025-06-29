@@ -60,8 +60,49 @@ const MONTHLY_GROWTH_RATE = 0.1; // 10% monthly growth
 const ANNUAL_LOSS_RATE = 0.05;   // 5% annual population loss
 const FOOD_PER_PERSON = 2;       // Food consumed per person per month
 
+// Multiplayer specific interfaces
+interface GameEvent {
+  id: string;
+  type: 'trade_offer' | 'war_declared' | 'attack_launched' | 'tech_researched' | 'turn_ended';
+  fromUserId?: string;
+  targetUserId?: string;
+  data: any;
+  timestamp: number;
+  read: boolean;
+}
+
+interface TurnInfo {
+  currentPlayer: string;
+  turnNumber: number;
+  deadline?: number; // Optional turn time limit
+  actionsTaken: string[]; // Track what actions were taken this turn
+}
+
+interface MultiplayerState {
+  isMultiplayer: boolean;
+  isHost: boolean;
+  players: Record<string, {
+    userId: string;
+    nationName: string;
+    leaderName: string;
+    isOnline: boolean;
+    lastSeen: number;
+  }>;
+  turnInfo: TurnInfo;
+  gameEvents: GameEvent[];
+  pendingActions: any[]; // Actions waiting to be synchronized
+  syncStatus: 'synced' | 'syncing' | 'error';
+}
+
 // Game state interface
 interface GameState {
+  gameId: string | null;
+  diplomaticStances: Record<string, 'neutral' | 'alliance' | 'rivalry'>;
+  activeWars: { attackerId: string; defenderId: string; startedAt: any }[];
+  
+  // Multiplayer state
+  multiplayer: MultiplayerState;
+  
   // Resources and metrics
   resources: Resources;
   naturalResources: NaturalResources;
@@ -94,11 +135,27 @@ interface GameState {
   distributePeople: (role: 'workers' | 'soldiers' | 'scientists', amount: number) => void;
   setNation: (name: string) => void;
   setLeader: (name: string) => void;
+  setGameId: (id: string | null) => void;
+  setGameState: (newState: Partial<GameState>) => void;
+  setDiplomaticStance: (targetUserId: string, stance: 'neutral' | 'alliance' | 'rivalry') => void;
+  setWarOutcome: (attackerId: string, defenderId: string, outcome: 'win' | 'loss' | 'draw', stolenResources: any, attackerCasualties: number, defenderCasualties: number) => void;
   resetGame: () => void;
   
   // Growth actions
   triggerGrowth: (key: keyof Resources, manual?: boolean) => void;
   checkAutoGrowth: () => void;
+  
+  // Multiplayer actions
+  initializeMultiplayer: (gameId: string, isHost: boolean, players: Record<string, any>) => void;
+  updatePlayerStatus: (userId: string, isOnline: boolean) => void;
+  addGameEvent: (event: Omit<GameEvent, 'id' | 'timestamp' | 'read'>) => void;
+  markEventAsRead: (eventId: string) => void;
+  endTurn: () => void;
+  setCurrentPlayer: (playerId: string) => void;
+  syncGameState: (remoteState: Partial<GameState>) => void;
+  queueAction: (action: any) => void;
+  processQueuedActions: () => void;
+  setSyncStatus: (status: 'synced' | 'syncing' | 'error') => void;
 }
 
 // Initial era and year definitions
@@ -472,6 +529,22 @@ const updateObjectivesStatus = (
 // Create the store
 export const useGameStore = create<GameState>((set, get) => ({
   // Initial state
+  gameId: null,
+  diplomaticStances: {},
+  activeWars: [],
+  multiplayer: {
+    isMultiplayer: false,
+    isHost: false,
+    players: {},
+    turnInfo: {
+      currentPlayer: '',
+      turnNumber: 1,
+      actionsTaken: []
+    },
+    gameEvents: [],
+    pendingActions: [],
+    syncStatus: 'synced'
+  },
   resources: {
     stability: 10,
     economy: 5,
@@ -857,7 +930,56 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNation: (name: string) => set({ nationName: name }),
   
   setLeader: (name: string) => set({ leaderName: name }),
+
+  setGameId: (id: string | null) => set({ gameId: id }),
   
+  setGameState: (newState: Partial<GameState>) => set(newState),
+
+  setDiplomaticStance: (targetUserId: string, stance: 'neutral' | 'alliance' | 'rivalry') => {
+    set(state => ({
+      diplomaticStances: {
+        ...state.diplomaticStances,
+        [targetUserId]: stance,
+      },
+    }));
+  },
+
+  setWarOutcome: (attackerId: string, defenderId: string, outcome: 'win' | 'loss' | 'draw', stolenResources: any, attackerCasualties: number, defenderCasualties: number) => {
+    set(state => {
+      const newResources = { ...state.resources };
+      const newNaturalResources = { ...state.naturalResources };
+      const newPopulation = { ...state.population };
+
+      // Apply resource changes based on outcome
+      if (outcome === 'win') {
+        newResources.military = Math.min(100, newResources.military + 5); // Small military boost for win
+        newResources.stability = Math.min(100, newResources.stability + 3); // Small stability boost
+        // Add stolen resources
+        for (const key in stolenResources) {
+          newNaturalResources[key as keyof NaturalResources] = Math.max(0, newNaturalResources[key as keyof NaturalResources] + stolenResources[key]);
+        }
+      } else if (outcome === 'loss') {
+        newResources.military = Math.max(0, newResources.military - 5); // Military hit for loss
+        newResources.stability = Math.max(0, newResources.stability - 3); // Stability hit
+        // Resources are stolen from the loser, so they decrease
+        for (const key in stolenResources) {
+          newNaturalResources[key as keyof NaturalResources] = Math.max(0, newNaturalResources[key as keyof NaturalResources] - stolenResources[key]);
+        }
+      }
+
+      // Apply casualties
+      newPopulation.soldiers = Math.max(0, newPopulation.soldiers - attackerCasualties);
+      // Note: Defender casualties are handled by the Firestore update directly from launchAttackInFirestore
+
+      return {
+        resources: newResources,
+        naturalResources: newNaturalResources,
+        population: newPopulation,
+        // Optionally, add war event to activeWars or a separate war history array
+      };
+    });
+  },
+
   resetGame: () => {
     const initialResources = {
       stability: 10,
@@ -910,7 +1032,221 @@ export const useGameStore = create<GameState>((set, get) => ({
       lastTechResearched: null,
       yearlyObjectives: initialObjectives,
       canAdvanceYear: false,
-      gameStartTime: Date.now()
+      gameStartTime: Date.now(),
+      multiplayer: {
+        isMultiplayer: false,
+        isHost: false,
+        players: {},
+        turnInfo: {
+          currentPlayer: '',
+          turnNumber: 1,
+          actionsTaken: []
+        },
+        gameEvents: [],
+        pendingActions: [],
+        syncStatus: 'synced'
+      }
     });
+  },
+
+  // Multiplayer actions
+  initializeMultiplayer: (gameId: string, isHost: boolean, players: Record<string, any>) => {
+    set(state => ({
+      gameId,
+      multiplayer: {
+        ...state.multiplayer,
+        isMultiplayer: true,
+        isHost,
+        players,
+        turnInfo: {
+          currentPlayer: isHost ? Object.keys(players)[0] : state.multiplayer.turnInfo.currentPlayer,
+          turnNumber: 1,
+          actionsTaken: []
+        }
+      }
+    }));
+  },
+
+  updatePlayerStatus: (userId: string, isOnline: boolean) => {
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        players: {
+          ...state.multiplayer.players,
+          [userId]: {
+            ...state.multiplayer.players[userId],
+            isOnline,
+            lastSeen: Date.now()
+          }
+        }
+      }
+    }));
+  },
+
+  addGameEvent: (event: Omit<GameEvent, 'id' | 'timestamp' | 'read'>) => {
+    const newEvent: GameEvent = {
+      ...event,
+      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: Date.now(),
+      read: false
+    };
+
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        gameEvents: [...state.multiplayer.gameEvents, newEvent]
+      }
+    }));
+  },
+
+  markEventAsRead: (eventId: string) => {
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        gameEvents: state.multiplayer.gameEvents.map(event =>
+          event.id === eventId ? { ...event, read: true } : event
+        )
+      }
+    }));
+  },
+
+  endTurn: () => {
+    const { multiplayer } = get();
+    const playerIds = Object.keys(multiplayer.players);
+    const currentIndex = playerIds.indexOf(multiplayer.turnInfo.currentPlayer);
+    const nextIndex = (currentIndex + 1) % playerIds.length;
+    const nextPlayer = playerIds[nextIndex];
+    
+    // Add turn end event
+    get().addGameEvent({
+      type: 'turn_ended',
+      fromUserId: multiplayer.turnInfo.currentPlayer,
+      data: {
+        turnNumber: multiplayer.turnInfo.turnNumber,
+        actionsTaken: multiplayer.turnInfo.actionsTaken
+      }
+    });
+
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        turnInfo: {
+          currentPlayer: nextPlayer,
+          turnNumber: nextIndex === 0 ? state.multiplayer.turnInfo.turnNumber + 1 : state.multiplayer.turnInfo.turnNumber,
+          actionsTaken: []
+        }
+      }
+    }));
+  },
+
+  setCurrentPlayer: (playerId: string) => {
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        turnInfo: {
+          ...state.multiplayer.turnInfo,
+          currentPlayer: playerId
+        }
+      }
+    }));
+  },
+
+  syncGameState: (remoteState: Partial<GameState>) => {
+    set(state => {
+      // Merge remote state with local state, prioritizing remote for multiplayer games
+      const mergedState = { ...state };
+      
+      if (remoteState.resources) {
+        mergedState.resources = { ...state.resources, ...remoteState.resources };
+      }
+      
+      if (remoteState.naturalResources) {
+        mergedState.naturalResources = { ...state.naturalResources, ...remoteState.naturalResources };
+      }
+      
+      if (remoteState.population) {
+        mergedState.population = { ...state.population, ...remoteState.population };
+      }
+      
+      if (remoteState.unlockedTechs) {
+        mergedState.unlockedTechs = remoteState.unlockedTechs;
+      }
+      
+      if (remoteState.year !== undefined) {
+        mergedState.year = remoteState.year;
+      }
+      
+      if (remoteState.month !== undefined) {
+        mergedState.month = remoteState.month;
+      }
+      
+      if (remoteState.currentEra) {
+        mergedState.currentEra = remoteState.currentEra;
+      }
+      
+      if (remoteState.diplomaticStances) {
+        mergedState.diplomaticStances = { ...state.diplomaticStances, ...remoteState.diplomaticStances };
+      }
+      
+      if (remoteState.activeWars) {
+        mergedState.activeWars = remoteState.activeWars;
+      }
+
+      return mergedState;
+    });
+  },
+
+  queueAction: (action: any) => {
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        pendingActions: [...state.multiplayer.pendingActions, {
+          ...action,
+          id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now()
+        }]
+      }
+    }));
+  },
+
+  processQueuedActions: () => {
+    const { multiplayer } = get();
+    
+    // Process each queued action
+    multiplayer.pendingActions.forEach(action => {
+      switch (action.type) {
+        case 'tech_research':
+          get().selectTech(action.techId);
+          break;
+        case 'resource_investment':
+          get().investInResource(action.resourceKey);
+          break;
+        case 'population_distribution':
+          get().distributePeople(action.role, action.amount);
+          break;
+        case 'month_advance':
+          get().advanceMonth();
+          break;
+        default:
+          console.warn('Unknown action type:', action.type);
+      }
+    });
+
+    // Clear processed actions
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        pendingActions: []
+      }
+    }));
+  },
+
+  setSyncStatus: (status: 'synced' | 'syncing' | 'error') => {
+    set(state => ({
+      multiplayer: {
+        ...state.multiplayer,
+        syncStatus: status
+      }
+    }));
   }
 })); 

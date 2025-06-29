@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signInWithEmail, signInWithGoogle } from '../../utils/firebase';
+import { signInWithEmail, signInWithGoogle, sendPasswordReset } from '../../utils/firebase';
 
 interface LoginProps {
   onToggleForm: () => void;
@@ -10,6 +10,7 @@ const Login = ({ onToggleForm }: LoginProps) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,11 +39,28 @@ const Login = ({ onToggleForm }: LoginProps) => {
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!email) {
+      return setError('Please enter your email address to reset your password.');
+    }
+    setError('');
+    setLoading(true);
+    try {
+      await sendPasswordReset(email);
+      setResetSent(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to send password reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md border border-gray-700">
       <h2 className="text-2xl font-bold mb-6 text-center text-white">Login to World Order</h2>
       
       {error && <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded mb-4">{error}</div>}
+      {resetSent && <div className="bg-green-900 border border-green-700 text-green-200 px-4 py-3 rounded mb-4">Password reset email sent. Please check your inbox.</div>}
       
       <form onSubmit={handleEmailLogin}>
         <div className="mb-4">
@@ -71,6 +89,16 @@ const Login = ({ onToggleForm }: LoginProps) => {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+        </div>
+        
+        <div className="flex items-center justify-between mb-6">
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            className="text-sm text-blue-400 hover:text-blue-300 focus:outline-none"
+          >
+            Forgot Password?
+          </button>
         </div>
         
         <div className="flex flex-col gap-4">

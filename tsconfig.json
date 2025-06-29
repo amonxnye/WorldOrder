@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.app.json",
-  "include": ["src"],
+  "include": ["src", "vitest.config.ts"],
   "compilerOptions": {
     "skipLibCheck": true,
     "noImplicitAny": false,

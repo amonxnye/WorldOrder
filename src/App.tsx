@@ -1,3 +1,5 @@
+import DiplomacyDashboard from './components/DiplomacyDashboard';
+import MultiplayerLobby from './components/MultiplayerLobby';
 import TechTree from './components/TechTree';
 import ResourceDisplay from './components/ResourceDisplay';
 import NaturalResourceDisplay from './components/NaturalResourceDisplay';
@@ -11,25 +13,60 @@ import BankingSystem from './components/BankingSystem';
 import AuthContainer from './components/auth/AuthContainer';
 import UserProfile from './components/auth/UserProfile';
 import NationSetupModal from './components/NationSetupModal';
+import TurnManager from './components/TurnManager';
+import MultiplayerEventsFeed from './components/MultiplayerEventsFeed';
 import { useState, useEffect } from 'react';
 import { useGameStore } from './store/gameStore';
 import { useAuth } from './utils/AuthContext';
-import { updateUserGameStats } from './utils/firebase';
+import { updateUserGameStats, getGameDataFromFirestore } from './utils/firebase';
 
 function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [nationSetupModalOpen, setNationSetupModalOpen] = useState(false);
+  const [multiplayerLobbyOpen, setMultiplayerLobbyOpen] = useState(false);
+  const [isMultiplayerGameLoaded, setIsMultiplayerGameLoaded] = useState(false);
+  const [showDiplomacy, setShowDiplomacy] = useState(false); // New state for diplomacy dashboard
+
   const resetGame = useGameStore(state => state.resetGame);
+  const setGameState = useGameStore(state => state.setGameState);
   const { currentUser, loading } = useAuth();
   const gameState = useGameStore(state => state);
   const nationName = useGameStore(state => state.nationName);
   const leaderName = useGameStore(state => state.leaderName);
+  const gameId = useGameStore(state => state.gameId);
   
   // Initialize game with objectives on first load
   useEffect(() => {
     resetGame();
   }, [resetGame]);
+
+  // Load multiplayer game data if gameId is set
+  useEffect(() => {
+    const loadMultiplayerGame = async () => {
+      if (gameId && currentUser) {
+        setIsMultiplayerGameLoaded(false);
+        try {
+          const gameData = await getGameDataFromFirestore(gameId);
+          if (gameData && gameData.playerData && gameData.playerData[currentUser.uid]) {
+            setGameState(gameData.playerData[currentUser.uid]);
+            setGameStarted(true);
+            setMultiplayerLobbyOpen(false);
+          } else {
+            console.error("Player data not found in game document.");
+            // Handle error: maybe redirect back to lobby or show message
+          }
+        } catch (error) {
+          console.error("Error loading multiplayer game:", error);
+          // Handle error
+        } finally {
+          setIsMultiplayerGameLoaded(true);
+        }
+      }
+    };
+
+    loadMultiplayerGame();
+  }, [gameId, currentUser, setGameState]);
 
   // Save game stats when game state changes
   useEffect(() => {
@@ -76,7 +113,7 @@ function App() {
     }
   };
 
-  if (loading) {
+  if (loading || (gameId && !isMultiplayerGameLoaded)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
         <div className="text-center">
@@ -96,6 +133,14 @@ function App() {
           <h1 className="text-3xl md:text-4xl font-bold text-white neon-text">🌍 World Order</h1>
           <div className="flex items-center gap-4">
             {gameStarted && <NationSelector />}
+            {gameStarted && gameId && (
+              <button
+                onClick={() => setShowDiplomacy(!showDiplomacy)}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                Diplomacy
+              </button>
+            )}
             {currentUser ? (
               <UserProfile />
             ) : (
@@ -109,7 +154,7 @@ function App() {
           </div>
         </header>
         
-        {!gameStarted ? (
+        {!gameStarted && !multiplayerLobbyOpen && !showDiplomacy ? ( // Added showDiplomacy to condition
           <div className="max-w-3xl mx-auto p-8 glass-container hover-scale">
             <h2 className="text-3xl font-bold mb-6 text-center neon-text">Welcome to World Order</h2>
             <p className="mb-8 text-lg text-center">
@@ -166,12 +211,20 @@ function App() {
               </a>
             </div>
             
-            <button 
-              onClick={handleStartGame}
-              className="game-btn w-full py-4 text-lg font-bold"
-            >
-              {currentUser ? (nationName && leaderName ? "Continue Your Journey" : "Setup Your Nation") : "Sign in to Play"}
-            </button>
+            <div className="flex flex-col gap-4">
+              <button 
+                onClick={handleStartGame}
+                className="game-btn w-full py-4 text-lg font-bold"
+              >
+                {currentUser ? (nationName && leaderName ? "Continue Your Journey" : "Setup Your Nation") : "Sign in to Play"}
+              </button>
+              <button 
+                onClick={() => setMultiplayerLobbyOpen(true)}
+                className="game-btn w-full py-4 text-lg font-bold"
+              >
+                Multiplayer
+              </button>
+            </div>
 
             {!currentUser && (
               <div className="mt-4 text-center text-gray-300">
@@ -186,16 +239,25 @@ function App() {
               </div>
             )}
           </div>
+        ) : multiplayerLobbyOpen ? (
+          <MultiplayerLobby />
+        ) : showDiplomacy ? (
+          <DiplomacyDashboard />
         ) : (
           currentUser ? (
-            <div className="grid gap-6 grid-cols-1 md:grid-cols-12">
-              {/* Left Column: Resource Management */}
-              <div className="md:col-span-3 space-y-6">
-                <ResourceDisplay />
-                <NaturalResourceDisplay />
-                <PopulationManager />
-                <BankingSystem />
-              </div>
+            <>
+              {/* Multiplayer Components */}
+              <TurnManager />
+              <MultiplayerEventsFeed />
+              
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-12">
+                {/* Left Column: Resource Management */}
+                <div className="md:col-span-3 space-y-6">
+                  <ResourceDisplay />
+                  <NaturalResourceDisplay />
+                  <PopulationManager />
+                  <BankingSystem />
+                </div>
               
               {/* Middle Column: Tech Tree */}
               <div className="md:col-span-6">
@@ -219,6 +281,7 @@ function App() {
                 </div>
               </div>
             </div>
+            </>
           ) : (
             <div className="max-w-3xl mx-auto p-8 glass-container hover-scale text-center">
               <h2 className="text-2xl font-bold mb-4 text-red-500">Authentication Required</h2>
@@ -273,4 +336,4 @@ function App() {
   );
 }
 
-export default App
+export default App;
